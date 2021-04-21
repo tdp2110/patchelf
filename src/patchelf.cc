@@ -17,6 +17,7 @@
  */
 
 #include <algorithm>
+#include <fstream>
 #include <limits>
 #include <map>
 #include <memory>
@@ -316,27 +317,24 @@ static FileContents readFile(const std::string & fileName,
 
     if (static_cast<uint64_t>(st.st_size) > static_cast<uint64_t>(std::numeric_limits<size_t>::max()))
         throw SysError(fmt("cannot read file of size ", st.st_size, " into memory"));
-
+        
     size_t size = std::min(cutOff, static_cast<size_t>(st.st_size));
 
-    FileContents contents = std::make_shared<std::vector<unsigned char>>();
-    contents->reserve(size + 32 * 1024 * 1024);
-    contents->resize(size, 0);
+    std::ifstream input(fileName, std::ios::binary);
 
-    int fd = open(fileName.c_str(), O_RDONLY);
-    if (fd == -1) throw SysError(fmt("opening '", fileName, "'"));
+    if (!input.is_open())
+        throw SysError(fmt("opening '", fileName, "'"));
 
-    size_t bytesRead = 0;
-    ssize_t portion;
-    while ((portion = read(fd, contents->data() + bytesRead, size - bytesRead)) > 0)
-        bytesRead += portion;
+    std::vector<char> contentsAsChar{std::istreambuf_iterator<char>(input),
+                                     {}};
 
-    if (bytesRead != size)
-        throw SysError(fmt("reading '", fileName, "'"));
+    const unsigned char* dataBegin = reinterpret_cast<const unsigned char*>(&contentsAsChar[0]);
+    const unsigned char* dataEnd = dataBegin + contentsAsChar.size();
+    
+    std::vector<unsigned char> contentsAsUChar {dataBegin, dataEnd};
+    contentsAsUChar.reserve(size + 32 * 1024 * 1024);
 
-    close(fd);
-
-    return contents;
+    return std::make_shared<std::vector<unsigned char>>(std::move(contentsAsUChar));
 }
 
 
